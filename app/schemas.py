@@ -30,6 +30,14 @@ class UserPublic(UserBase):
     id: UUID
 
 
+class UserUpdate(BaseModel):
+    username: str | None = None
+    full_name: str | None = None
+    password: str | None = None
+    email: EmailStr | None = None
+    is_active: bool | None = None
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str

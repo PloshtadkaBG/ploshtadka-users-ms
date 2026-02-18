@@ -17,7 +17,7 @@ from app.deps import (
     require_scopes,
 )
 from app.models import User
-from app.schemas import UserCreate, UserPublic, UserScopesUpdate
+from app.schemas import UserCreate, UserPublic, UserScopesUpdate, UserUpdate
 from app.settings import DEFAULT_USER_SCOPES
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -59,8 +59,37 @@ async def list_users(
 
 
 @router.get("/{user_id}", response_model=Schema)
-async def get_user(user_id: UUID = Path()) -> Schema | None:
+async def get_user(
+    _=Security(get_current_active_user), user_id: UUID = Path()
+) -> Schema | None:
     return await user_crud.get_by_id(user_id)
+
+
+@router.patch("/{user_id}", response_model=UserPublic)
+async def update_user(
+    payload: UserUpdate,
+    user_id: UUID = Path(),
+    current_user: User = Security(get_current_active_user),
+) -> UserPublic:
+    if current_user.id != user_id and not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to update this user",
+        )
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    if "password" in update_data:
+        update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+
+    updated_user = await user_crud.update_by(update_data, id=user_id)
+
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    return UserPublic.model_validate(updated_user)
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -80,7 +109,7 @@ async def read_users_me(
 @router.get("/{user_id}/scopes", response_model=UserScopesUpdate, tags=["admin"])
 async def get_user_scopes(
     user_id: UUID = Path(),
-    current_admin=Security(get_current_admin_user),
+    _=Security(get_current_admin_user),
 ) -> UserScopesUpdate:
     user = await get_user_by_id(user_id)
     if not user:
@@ -94,7 +123,7 @@ async def get_user_scopes(
 async def set_user_scopes(
     user_id: UUID,
     payload: UserScopesUpdate,
-    current_admin=Security(get_current_admin_user),
+    _=Security(get_current_admin_user),
 ) -> UserScopesUpdate:
     user = await update_user_scopes(user_id, payload.scopes)
     if not user:

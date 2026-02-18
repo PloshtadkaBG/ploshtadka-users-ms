@@ -1,24 +1,25 @@
-from typing import Optional
+from uuid import UUID
 
+from pydantic import BaseModel, ConfigDict, EmailStr
 from tortoise import Tortoise
 from tortoise.contrib.pydantic import pydantic_model_creator
-from pydantic import BaseModel, EmailStr
 
 from app.models import User
 
-Tortoise.init_models(
-    ["app.models"], "models"
-)
+Tortoise.init_models(["app.models"], "models")
 
 Schema = pydantic_model_creator(User, name="UserRead", exclude=("hashed_password",))
 Create = pydantic_model_creator(User, name="UserCreateDB", exclude_readonly=True)
 
 
 class UserBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     username: str
-    full_name: Optional[str] = None
-    email: Optional[EmailStr] = None
+    full_name: str | None = None
+    email: EmailStr | None = None
     is_active: bool = True
+    scopes: list[str] = []
 
 
 class UserCreate(UserBase):
@@ -26,7 +27,7 @@ class UserCreate(UserBase):
 
 
 class UserPublic(UserBase):
-    id: int
+    id: UUID
 
 
 class Token(BaseModel):
@@ -35,5 +36,9 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    username: str | None = None
+    scopes: list[str] = []
 
+
+class UserScopesUpdate(BaseModel):
+    scopes: list[str]

@@ -3,7 +3,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.auth import authenticate_user, create_access_token, get_current_user
+from app.auth import authenticate_user, create_access_token
+from app.deps import get_current_user
 from app.models import User
 from app.schemas import Token
 

@@ -1,15 +1,20 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Path, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Security, status
 
 from app import Schema, user_crud
-from app.auth import get_current_active_user, get_current_admin_user, get_password_hash
+from app.auth import get_password_hash
 from app.crud import (
     create_user,
     get_user_by_email,
     get_user_by_id,
     get_user_by_username,
     update_user_scopes,
+)
+from app.deps import (
+    get_current_active_user,
+    get_current_admin_user,
+    require_scopes,
 )
 from app.models import User
 from app.schemas import UserCreate, UserPublic, UserScopesUpdate
@@ -47,7 +52,9 @@ async def register_user(payload: UserCreate) -> UserPublic:
 
 
 @router.get("/", response_model=list[Schema])
-async def list_users() -> list[Schema]:
+async def list_users(
+    _=Depends(require_scopes("users:read")),
+) -> list[Schema]:
     return await user_crud.get_all()
 
 
@@ -57,7 +64,9 @@ async def get_user(user_id: UUID = Path()) -> Schema | None:
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: UUID = Path()) -> None:
+async def delete_user(
+    _=Security(get_current_admin_user), user_id: UUID = Path()
+) -> None:
     await user_crud.delete_by(id=user_id)
 
 

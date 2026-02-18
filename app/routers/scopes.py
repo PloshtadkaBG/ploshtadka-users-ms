@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Security
 
-from app.auth import get_current_admin_user
+from app.deps import get_current_admin_user
 from app.settings import ADMIN_SCOPES_SCOPE, DEFAULT_USER_SCOPES
-
 
 router = APIRouter(prefix="/scopes", tags=["scopes"])
 
@@ -19,4 +18,3 @@ async def list_all_scopes(current_admin=Security(get_current_admin_user)) -> lis
     scopes = set(DEFAULT_USER_SCOPES)
     scopes.add(ADMIN_SCOPES_SCOPE)
     return sorted(scopes)
-

@@ -30,7 +30,7 @@ def client():
     FastAPI TestClient with auth dependencies overridden, following FastAPI's
     testing patterns (using dependency_overrides).
     """
-    from app.auth import get_current_active_user, get_current_admin_user
+    from app.deps import get_current_active_user, get_current_admin_user
     from main import application
 
     def override_active_user():

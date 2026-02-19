@@ -71,7 +71,7 @@ async def update_user(
     user_id: UUID = Path(),
     current_user: User = Security(get_current_active_user),
 ) -> UserPublic:
-    if current_user.id != user_id and not getattr(current_user, "is_admin", False):
+    if current_user.id != user_id and ("admin:scopes" not in current_user.scopes):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to update this user",

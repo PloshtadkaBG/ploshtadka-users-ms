@@ -7,20 +7,13 @@ from jose import JWTError, jwt
 from app.crud import get_user_by_username
 from app.models import User
 from app.schemas import TokenData
+from app.scopes import SCOPE_DESCS, UserScope
 from app.settings import (
-    ADMIN_SCOPES_SCOPE,
     ALGORITHM,
     SECRET_KEY,
 )
 
-oauth2_scheme = OAuth2PasswordBearer(
-    tokenUrl="auth/token",
-    scopes={
-        "users:read": "Read users data.",
-        "users:me": "Read current user profile.",
-        ADMIN_SCOPES_SCOPE: "Manage user scopes.",
-    },
-)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", scopes=SCOPE_DESCS)
 
 
 async def get_current_user(
@@ -74,7 +67,7 @@ async def get_current_active_user(current_user=Security(get_current_user)) -> Us
 
 
 async def get_current_admin_user(
-    current_user=Security(get_current_user, scopes=[ADMIN_SCOPES_SCOPE]),
+    current_user=Security(get_current_user, scopes=[UserScope.ADMIN]),
 ) -> User:
     return current_user
 

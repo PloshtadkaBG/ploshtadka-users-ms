@@ -18,7 +18,7 @@ from app.deps import (
 )
 from app.models import User
 from app.schemas import UserCreate, UserPublic, UserScopesUpdate, UserUpdate
-from app.settings import DEFAULT_USER_SCOPES
+from app.scopes import DEFAULT_USER_SCOPES
 
 router = APIRouter(prefix="/users", tags=["users"])
 

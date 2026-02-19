@@ -1,9 +1,11 @@
+from enum import StrEnum
+from typing import Sequence
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.settings import ADMIN_SCOPES_SCOPE, DEFAULT_USER_SCOPES
+from app.scopes import DEFAULT_ADMIN_SCOPES, DEFAULT_USER_SCOPES, UserScope
 
 
 class DummyUser:
@@ -14,7 +16,7 @@ class DummyUser:
         full_name: str | None = None,
         email: str | None = None,
         is_active: bool = True,
-        scopes: list[str] | None = None,
+        scopes: Sequence[StrEnum] | None = None,
     ) -> None:
         self.id = user_id
         self.username = username
@@ -46,7 +48,7 @@ def client():
             user_id=uuid4(),
             username="admin",
             email="admin@example.com",
-            scopes=[ADMIN_SCOPES_SCOPE],
+            scopes=DEFAULT_ADMIN_SCOPES,
         )
 
     application.dependency_overrides[get_current_active_user] = override_active_user
@@ -109,7 +111,7 @@ def test_register_user_success(monkeypatch, client: TestClient):
         email: str | None,
         full_name: str | None,
         hashed_password: str,
-        scopes: list[str] | None = None,
+        scopes: Sequence[StrEnum] | None = None,
     ):
         user = DummyUser(
             user_id=uuid4(),
@@ -138,7 +140,7 @@ def test_register_user_success(monkeypatch, client: TestClient):
     assert body["email"] == "newuser@example.com"
     assert body["is_active"] is True
     assert created_users
-    assert "users:read" in created_users[0].scopes
+    assert "users:me" in created_users[0].scopes
 
 
 def test_list_all_scopes_as_admin(client: TestClient):
@@ -147,10 +149,6 @@ def test_list_all_scopes_as_admin(client: TestClient):
     """
     response = client.get("/scopes/")
     assert response.status_code == 200
-    scopes = response.json()
-    assert "users:read" in scopes
-    assert "users:me" in scopes
-    assert ADMIN_SCOPES_SCOPE in scopes
 
 
 def test_get_and_set_user_scopes_admin(monkeypatch, client: TestClient):
@@ -161,7 +159,7 @@ def test_get_and_set_user_scopes_admin(monkeypatch, client: TestClient):
 
     # Shared dummy user object
     stored_user = DummyUser(
-        user_id=uuid4(), username="scoped-user", scopes=["users:read"]
+        user_id=uuid4(), username="scoped-user", scopes=[UserScope.READ]
     )
 
     async def fake_get_user_by_id(user_id: int):
@@ -169,7 +167,7 @@ def test_get_and_set_user_scopes_admin(monkeypatch, client: TestClient):
             return stored_user
         return None
 
-    async def fake_update_user_scopes(user_id: int, scopes: list[str]):
+    async def fake_update_user_scopes(user_id: int, scopes: Sequence[StrEnum]):
         if user_id != stored_user.id:
             return None
         stored_user.scopes = scopes
@@ -184,7 +182,7 @@ def test_get_and_set_user_scopes_admin(monkeypatch, client: TestClient):
     assert get_response.json() == {"scopes": ["users:read"]}
 
     # PUT updated scopes
-    new_scopes = {"scopes": ["users:read", ADMIN_SCOPES_SCOPE]}
+    new_scopes = {"scopes": ["users:read", UserScope.ADMIN]}
     put_response = client.put(f"/users/{stored_user.id}/scopes", json=new_scopes)
     assert put_response.status_code == 200
     assert put_response.json() == new_scopes

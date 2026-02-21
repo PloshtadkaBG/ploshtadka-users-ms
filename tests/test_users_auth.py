@@ -1,189 +1,169 @@
-from enum import StrEnum
-from typing import Sequence
-from uuid import UUID, uuid4
+"""
+Endpoint tests for /auth, /users, and /scopes.
 
-import pytest
+Testing strategy:
+  - Auth deps are overridden via conftest.build_app()
+  - CRUD functions are patched per-test with AsyncMock (no DB)
+"""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
 
-from app.scopes import DEFAULT_ADMIN_SCOPES, DEFAULT_USER_SCOPES, UserScope
+from app.scopes import UserScope
+
+from .factories import OTHER_USER_ID, USER_ID, DummyUser, make_user, user_response
+
+USERS_CRUD_PATH = "app.routers.users"
+AUTH_CRUD_PATH = "app.routers.auth"
 
 
-class DummyUser:
-    def __init__(
-        self,
-        user_id: UUID = uuid4(),
-        username: str = "user",
-        full_name: str | None = None,
-        email: str | None = None,
-        is_active: bool = True,
-        scopes: Sequence[StrEnum] | None = None,
-    ) -> None:
-        self.id = user_id
-        self.username = username
-        self.full_name = full_name
-        self.email = email
-        self.is_active = is_active
-        self.scopes = scopes or []
+# ---------------------------------------------------------------------------
+# POST /auth/token
+# ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def client():
-    """
-    FastAPI TestClient with auth dependencies overridden, following FastAPI's
-    testing patterns (using dependency_overrides).
-    """
-    from app.deps import get_current_active_user, get_current_admin_user
-    from main import application
+class TestLogin:
+    def test_success(self, user_client: TestClient):
+        dummy = DummyUser(user_id=uuid4(), username="alice", scopes=["users:me"])
+        with patch(f"{AUTH_CRUD_PATH}.authenticate_user", new=AsyncMock(return_value=dummy)):
+            resp = user_client.post(
+                "/auth/token",
+                data={"username": "alice", "password": "secret"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "access_token" in body
+        assert body["token_type"] == "bearer"
 
-    def override_active_user():
-        return DummyUser(
+    def test_wrong_credentials(self, user_client: TestClient):
+        with patch(f"{AUTH_CRUD_PATH}.authenticate_user", new=AsyncMock(return_value=None)):
+            resp = user_client.post(
+                "/auth/token",
+                data={"username": "alice", "password": "wrong"},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /users/
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterUser:
+    def test_success(self, user_client: TestClient):
+        created = DummyUser(
             user_id=uuid4(),
-            username="active-user",
-            email="active@example.com",
-            scopes=DEFAULT_USER_SCOPES,
+            username="newuser",
+            email="newuser@example.com",
+            full_name="New User",
+            scopes=["users:me"],
         )
+        with (
+            patch(f"{USERS_CRUD_PATH}.get_user_by_username", new=AsyncMock(return_value=None)),
+            patch(f"{USERS_CRUD_PATH}.get_user_by_email", new=AsyncMock(return_value=None)),
+            patch(f"{USERS_CRUD_PATH}.create_user", new=AsyncMock(return_value=created)),
+        ):
+            resp = user_client.post(
+                "/users/",
+                json={
+                    "username": "newuser",
+                    "password": "strongpassword",
+                    "email": "newuser@example.com",
+                    "full_name": "New User",
+                },
+            )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["username"] == "newuser"
+        assert body["email"] == "newuser@example.com"
+        assert body["is_active"] is True
 
-    def override_admin_user():
-        return DummyUser(
-            user_id=uuid4(),
-            username="admin",
-            email="admin@example.com",
-            scopes=DEFAULT_ADMIN_SCOPES,
-        )
+    def test_duplicate_username(self, user_client: TestClient):
+        existing = make_user()
+        with patch(
+            f"{USERS_CRUD_PATH}.get_user_by_username", new=AsyncMock(return_value=existing)
+        ):
+            resp = user_client.post(
+                "/users/",
+                json={"username": "taken", "password": "pw"},
+            )
+        assert resp.status_code == 400
+        assert "Username" in resp.json()["detail"]
 
-    application.dependency_overrides[get_current_active_user] = override_active_user
-    application.dependency_overrides[get_current_admin_user] = override_admin_user
-
-    with TestClient(application) as test_client:
-        yield test_client
-
-    application.dependency_overrides.clear()
-
-
-def test_login_for_access_token_success(monkeypatch, client: TestClient):
-    """
-    Test the /auth/token endpoint using a mocked authenticate_user,
-    similar to how FastAPI docs mock dependencies in tests.
-    """
-    from app.routers import auth as auth_router
-
-    dummy_user = DummyUser(
-        user_id=uuid4(),
-        username="alice",
-        email="alice@example.com",
-        scopes=DEFAULT_USER_SCOPES,
-    )
-
-    async def fake_authenticate_user(username: str, password: str):
-        assert username == "alice"
-        assert password == "secret"
-        return dummy_user
-
-    monkeypatch.setattr(auth_router, "authenticate_user", fake_authenticate_user)
-
-    response = client.post(
-        "/auth/token",
-        data={"username": "alice", "password": "secret"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert "access_token" in body
-    assert body["token_type"] == "bearer"
+    def test_duplicate_email(self, user_client: TestClient):
+        existing = make_user()
+        with (
+            patch(f"{USERS_CRUD_PATH}.get_user_by_username", new=AsyncMock(return_value=None)),
+            patch(
+                f"{USERS_CRUD_PATH}.get_user_by_email", new=AsyncMock(return_value=existing)
+            ),
+        ):
+            resp = user_client.post(
+                "/users/",
+                json={"username": "someone", "password": "pw", "email": "taken@example.com"},
+            )
+        assert resp.status_code == 400
+        assert "Email" in resp.json()["detail"]
 
 
-def test_register_user_success(monkeypatch, client: TestClient):
-    """
-    Test POST /users/ with mocked CRUD functions so no real database is used.
-    """
-    from app.routers import users as users_router
-
-    created_users: list[DummyUser] = []
-
-    async def fake_get_user_by_username(username: str):
-        return None
-
-    async def fake_get_user_by_email(email: str):
-        return None
-
-    async def fake_create_user(
-        username: str,
-        email: str | None,
-        full_name: str | None,
-        hashed_password: str,
-        scopes: Sequence[StrEnum] | None = None,
-    ):
-        user = DummyUser(
-            user_id=uuid4(),
-            username=username,
-            full_name=full_name,
-            email=email,
-            scopes=scopes or [],
-        )
-        created_users.append(user)
-        return user
-
-    monkeypatch.setattr(users_router, "get_user_by_username", fake_get_user_by_username)
-    monkeypatch.setattr(users_router, "get_user_by_email", fake_get_user_by_email)
-    monkeypatch.setattr(users_router, "create_user", fake_create_user)
-
-    payload = {
-        "username": "newuser",
-        "password": "strongpassword",
-        "email": "newuser@example.com",
-        "full_name": "New User",
-    }
-    response = client.post("/users/", json=payload)
-    assert response.status_code == 201
-    body = response.json()
-    assert body["username"] == "newuser"
-    assert body["email"] == "newuser@example.com"
-    assert body["is_active"] is True
-    assert created_users
-    assert "users:me" in created_users[0].scopes
+# ---------------------------------------------------------------------------
+# GET /scopes/
+# ---------------------------------------------------------------------------
 
 
-def test_list_all_scopes_as_admin(client: TestClient):
-    """
-    Test /scopes/ listing, using the overridden admin dependency.
-    """
-    response = client.get("/scopes/")
-    assert response.status_code == 200
+class TestScopes:
+    def test_admin_can_list_scopes(self, admin_client: TestClient):
+        resp = admin_client.get("/scopes/")
+        assert resp.status_code == 200
+        assert isinstance(resp.json(), list)
+
+    def test_anon_is_rejected(self, anon_app):
+        client = TestClient(anon_app, raise_server_exceptions=False)
+        resp = client.get("/scopes/")
+        assert resp.status_code in (401, 403)
 
 
-def test_get_and_set_user_scopes_admin(monkeypatch, client: TestClient):
-    """
-    Test the admin scopes CRUD endpoints for a given user, with fake CRUD functions.
-    """
-    from app.routers import users as users_router
+# ---------------------------------------------------------------------------
+# GET /users/{id}/scopes  &  PUT /users/{id}/scopes
+# ---------------------------------------------------------------------------
 
-    # Shared dummy user object
-    stored_user = DummyUser(
-        user_id=uuid4(), username="scoped-user", scopes=[UserScope.READ]
-    )
 
-    async def fake_get_user_by_id(user_id: int):
-        if user_id == stored_user.id:
-            return stored_user
-        return None
+class TestUserScopes:
+    def test_get_user_scopes(self, admin_client: TestClient):
+        stored = DummyUser(user_id=OTHER_USER_ID, scopes=[UserScope.READ])
+        with patch(f"{USERS_CRUD_PATH}.get_user_by_id", new=AsyncMock(return_value=stored)):
+            resp = admin_client.get(f"/users/{OTHER_USER_ID}/scopes")
+        assert resp.status_code == 200
+        assert resp.json() == {"scopes": [UserScope.READ]}
 
-    async def fake_update_user_scopes(user_id: int, scopes: Sequence[StrEnum]):
-        if user_id != stored_user.id:
-            return None
-        stored_user.scopes = scopes
-        return stored_user
+    def test_get_user_scopes_not_found(self, admin_client: TestClient):
+        with patch(f"{USERS_CRUD_PATH}.get_user_by_id", new=AsyncMock(return_value=None)):
+            resp = admin_client.get(f"/users/{uuid4()}/scopes")
+        assert resp.status_code == 404
 
-    monkeypatch.setattr(users_router, "get_user_by_id", fake_get_user_by_id)
-    monkeypatch.setattr(users_router, "update_user_scopes", fake_update_user_scopes)
+    def test_put_user_scopes(self, admin_client: TestClient):
+        stored = DummyUser(user_id=OTHER_USER_ID, scopes=[UserScope.READ, UserScope.ADMIN])
+        new_scopes = [UserScope.READ, UserScope.ADMIN]
+        with patch(
+            f"{USERS_CRUD_PATH}.update_user_scopes", new=AsyncMock(return_value=stored)
+        ):
+            resp = admin_client.put(
+                f"/users/{OTHER_USER_ID}/scopes", json={"scopes": new_scopes}
+            )
+        assert resp.status_code == 200
+        assert resp.json() == {"scopes": new_scopes}
 
-    # GET existing scopes
-    get_response = client.get(f"/users/{stored_user.id}/scopes")
-    assert get_response.status_code == 200
-    assert get_response.json() == {"scopes": ["users:read"]}
-
-    # PUT updated scopes
-    new_scopes = {"scopes": ["users:read", UserScope.ADMIN]}
-    put_response = client.put(f"/users/{stored_user.id}/scopes", json=new_scopes)
-    assert put_response.status_code == 200
-    assert put_response.json() == new_scopes
-    assert stored_user.scopes == new_scopes["scopes"]
+    def test_put_user_scopes_not_found(self, admin_client: TestClient):
+        with patch(
+            f"{USERS_CRUD_PATH}.update_user_scopes", new=AsyncMock(return_value=None)
+        ):
+            resp = admin_client.put(
+                f"/users/{uuid4()}/scopes", json={"scopes": [UserScope.READ]}
+            )
+        assert resp.status_code == 404

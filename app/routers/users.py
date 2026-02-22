@@ -18,7 +18,7 @@ from app.deps import (
 )
 from app.models import User
 from app.schemas import UserCreate, UserPublic, UserScopesUpdate, UserUpdate
-from app.scopes import DEFAULT_USER_SCOPES
+from app.scopes import DEFAULT_USER_SCOPES, UserScope
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -71,7 +71,7 @@ async def update_user(
     user_id: UUID = Path(),
     current_user: User = Security(get_current_active_user),
 ) -> UserPublic:
-    if current_user.id != user_id and ("admin:scopes" not in current_user.scopes):
+    if current_user.id != user_id and (UserScope.ADMIN not in current_user.scopes):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to update this user",

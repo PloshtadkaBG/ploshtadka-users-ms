@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Security, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Security, status
 
 from app import Schema, user_crud
 from app.auth import get_password_hash
@@ -9,6 +9,7 @@ from app.crud import (
     get_user_by_email,
     get_user_by_id,
     get_user_by_username,
+    get_users_by_ids,
     update_user_scopes,
 )
 from app.deps import (
@@ -56,6 +57,15 @@ async def list_users(
     _=Depends(require_scopes("users:read")),
 ) -> list[Schema]:
     return await user_crud.get_all()
+
+
+@router.get("/bulk", response_model=list[Schema])
+async def get_users_bulk(
+    ids: list[UUID] = Query(..., min_length=1),
+    _=Depends(require_scopes("users:read")),
+) -> list[Schema]:
+    users = await get_users_by_ids(ids)
+    return [Schema.model_validate(u, from_attributes=True) for u in users]
 
 
 @router.get("/{user_id}", response_model=Schema)

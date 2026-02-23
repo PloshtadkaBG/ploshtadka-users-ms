@@ -36,6 +36,10 @@ async def create_user(
     )
 
 
+async def get_users_by_ids(ids: list[UUID]) -> list[User]:
+    return await User.filter(id__in=ids).all()
+
+
 async def update_user_scopes(user_id: UUID, scopes: list[str]) -> User | None:
     user = await User.get_or_none(id=user_id)
     if not user:

@@ -37,6 +37,17 @@ class BookingScope(StrEnum):
     ADMIN_DELETE = "admin:bookings:delete"
 
 
+class PaymentScope(StrEnum):
+    # Customer scopes
+    READ = "payments:read"  # view own payment history
+
+    # Admin scopes
+    ADMIN = "admin:payments"
+    ADMIN_READ = "admin:payments:read"
+    ADMIN_WRITE = "admin:payments:write"
+    ADMIN_DELETE = "admin:payments:delete"
+
+
 USER_SCOPES_DESCS: dict[str, str] = {
     UserScope.READ: "Read users data.",
     UserScope.ME: "Read current user profile.",
@@ -66,13 +77,28 @@ BOOKING_SCOPE_DESCRIPTIONS: dict[str, str] = {
     BookingScope.ADMIN_DELETE: "Hard-delete any booking (admin).",
 }
 
-SCOPE_DESCS = VENUE_SCOPES_DESCRIPTIONS | USER_SCOPES_DESCS | BOOKING_SCOPE_DESCRIPTIONS
+PAYMENT_SCOPE_DESCRIPTIONS: dict[str, str] = {
+    PaymentScope.READ: "View your own payment history.",
+    PaymentScope.ADMIN: "Full access to all payments (admin super-scope).",
+    PaymentScope.ADMIN_READ: "Read any payment (admin).",
+    PaymentScope.ADMIN_WRITE: "Modify any payment or issue refunds (admin).",
+    PaymentScope.ADMIN_DELETE: "Hard-delete any payment record (admin).",
+}
+
+
+SCOPE_DESCS = (
+    VENUE_SCOPES_DESCRIPTIONS
+    | USER_SCOPES_DESCS
+    | BOOKING_SCOPE_DESCRIPTIONS
+    | PAYMENT_SCOPE_DESCRIPTIONS
+)
 DEFAULT_USER_SCOPES = [
     UserScope.ME,
     VenueScope.READ,
     BookingScope.READ,
     BookingScope.WRITE,
     BookingScope.CANCEL,
+    PaymentScope.READ,
 ]
 DEFAULT_OWNER_SCOPES = DEFAULT_USER_SCOPES + [
     VenueScope.ME,
@@ -81,5 +107,11 @@ DEFAULT_OWNER_SCOPES = DEFAULT_USER_SCOPES + [
     VenueScope.IMAGES,
     VenueScope.SCHEDULE,
     BookingScope.MANAGE,
+    PaymentScope.READ,
 ]
-DEFAULT_ADMIN_SCOPES = [UserScope.ADMIN, VenueScope.ADMIN, BookingScope.ADMIN]
+DEFAULT_ADMIN_SCOPES = [
+    UserScope.ADMIN,
+    VenueScope.ADMIN,
+    BookingScope.ADMIN,
+    PaymentScope.ADMIN,
+]

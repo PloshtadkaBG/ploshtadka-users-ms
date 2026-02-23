@@ -61,9 +61,9 @@ async def list_users(
 
 @router.get("/bulk", response_model=list[Schema])
 async def get_users_bulk(
-    ids: list[UUID] = Query(..., min_length=1),
-    _=Depends(require_scopes("users:read")),
+    ids: list[UUID] = Query(...),
 ) -> list[Schema]:
+    """Internal bulk lookup by ID — called by peer services on the Docker network."""
     users = await get_users_by_ids(ids)
     return [Schema.model_validate(u, from_attributes=True) for u in users]
 

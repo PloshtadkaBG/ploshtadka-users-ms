@@ -67,6 +67,7 @@ This service is the **central scope registry** for the whole platform. `app/scop
 | Users | `UserScope` | `admin:users` |
 | Venues | `VenueScope` | `admin:venues` |
 | Bookings | `BookingScope` | `admin:bookings` |
+| Payments | `PaymentScope` | `admin:payments` |
 
 ### Default scope sets assigned on registration
 

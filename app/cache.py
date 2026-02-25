@@ -1,12 +1,10 @@
 import hashlib
 import json
-import logging
 
+from loguru import logger
 from redis.asyncio import Redis
 
 from app.settings import REDIS_URL
-
-logger = logging.getLogger(__name__)
 
 _redis: Redis | None = None
 VERIFY_TTL = 300  # 5 minutes

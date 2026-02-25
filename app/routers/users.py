@@ -3,6 +3,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Security, status
 
 from app import Schema, user_crud
+from loguru import logger
+
 from app.auth import get_password_hash
 from app.cache import invalidate_user_cache
 from app.crud import (
@@ -101,6 +103,7 @@ async def update_user(
         )
 
     await invalidate_user_cache(str(user_id))
+    logger.info("User updated and cache invalidated: user_id={}", user_id)
     return UserPublic.model_validate(updated_user)
 
 
@@ -143,4 +146,5 @@ async def set_user_scopes(
             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
         )
     await invalidate_user_cache(str(user_id))
+    logger.info("Scopes updated and cache invalidated: user_id={}", user_id)
     return UserScopesUpdate(scopes=user.scopes or [])

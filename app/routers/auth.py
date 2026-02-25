@@ -2,6 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
+from loguru import logger
 
 from app.auth import authenticate_user, create_access_token
 from app.cache import get_verify_cache, set_verify_cache
@@ -15,14 +16,15 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 async def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
-    print(form_data.username)
     user = await authenticate_user(form_data.username, form_data.password)
     if not user:
+        logger.warning("Failed login attempt for username={}", form_data.username)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    logger.info("User logged in: username={}", form_data.username)
 
     access_token = create_access_token(
         data={"sub": user.username}, scopes=user.scopes or []
@@ -44,6 +46,7 @@ async def verify_token(request: Request):
 
     cached = await get_verify_cache(token)
     if cached:
+        logger.debug("Cache hit for verify: username={}", cached["username"])
         return Response(
             status_code=200,
             headers={
@@ -54,6 +57,7 @@ async def verify_token(request: Request):
         )
 
     user = await resolve_user(token)
+    logger.debug("Cache miss for verify: username={}", user.username)
     payload = {
         "user_id": str(user.id),
         "username": user.username,

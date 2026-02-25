@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.auth import authenticate_user, create_access_token
-from app.deps import get_current_user
-from app.models import User
+from app.cache import get_verify_cache, set_verify_cache
+from app.deps import resolve_user
 from app.schemas import Token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -31,13 +31,41 @@ async def login_for_access_token(
 
 
 @router.get("/verify")
-async def verify_token(current_user: User = Depends(get_current_user)):
+async def verify_token(request: Request):
     """Called by Traefik forwardAuth for every protected request."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    token = auth_header[7:]
+
+    cached = await get_verify_cache(token)
+    if cached:
+        return Response(
+            status_code=200,
+            headers={
+                "X-User-Id": cached["user_id"],
+                "X-User-Scopes": cached["scopes"],
+                "X-Username": cached["username"],
+            },
+        )
+
+    user = await resolve_user(token)
+    payload = {
+        "user_id": str(user.id),
+        "username": user.username,
+        "scopes": " ".join(user.scopes or []),
+    }
+    await set_verify_cache(token, str(user.id), payload)
+
     return Response(
         status_code=200,
         headers={
-            "X-User-Id": str(current_user.id),
-            "X-User-Scopes": " ".join(current_user.scopes),
-            "X-Username": current_user.username,
+            "X-User-Id": payload["user_id"],
+            "X-User-Scopes": payload["scopes"],
+            "X-Username": payload["username"],
         },
     )

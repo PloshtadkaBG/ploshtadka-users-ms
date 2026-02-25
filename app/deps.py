@@ -16,6 +16,30 @@ from app.settings import (
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", scopes=SCOPE_DESCS)
 
 
+_CREDENTIALS_EXCEPTION = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Could not validate credentials",
+    headers={"WWW-Authenticate": "Bearer"},
+)
+
+
+async def resolve_user(token: str) -> User:
+    """Decode JWT and load the user from DB. Used by verify route + get_current_user."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str | None = payload.get("sub")
+        if username is None:
+            raise _CREDENTIALS_EXCEPTION
+    except JWTError:
+        raise _CREDENTIALS_EXCEPTION
+
+    user = await get_user_by_username(username)
+    if user is None or not user.is_active:
+        raise _CREDENTIALS_EXCEPTION
+
+    return user
+
+
 async def get_current_user(
     security_scopes: SecurityScopes,
     token: Annotated[str, Depends(oauth2_scheme)],
@@ -25,20 +49,16 @@ async def get_current_user(
         if security_scopes.scopes
         else "Bearer"
     )
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": authenticate_value},
-    )
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str | None = payload.get("sub")
         token_scopes: list[str] = payload.get("scopes", [])
         if username is None:
-            raise credentials_exception
+            raise _CREDENTIALS_EXCEPTION
         token_data = TokenData(username=username, scopes=token_scopes)
     except JWTError:
-        raise credentials_exception
+        raise _CREDENTIALS_EXCEPTION
 
     for scope in security_scopes.scopes:
         if scope not in token_data.scopes:
@@ -50,7 +70,7 @@ async def get_current_user(
 
     user = await get_user_by_username(token_data.username)  # type: ignore[arg-type]
     if user is None:
-        raise credentials_exception
+        raise _CREDENTIALS_EXCEPTION
 
     if not user.is_active:
         raise HTTPException(

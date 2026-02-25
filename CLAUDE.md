@@ -113,6 +113,12 @@ def test_something(monkeypatch, client: TestClient):
     assert resp.status_code == 201
 ```
 
+## Redis cache (`app/cache.py`)
+- Caches `GET /auth/verify` results keyed by `auth:verify:{sha256(token)}`, TTL 5 min
+- Reverse index `auth:user_tokens:{user_id}` allows full invalidation on user mutation
+- `invalidate_user_cache(user_id)` is called from `PATCH /users/{id}` and `PUT /users/{id}/scopes`
+- All Redis ops silently degrade on failure — auth is never blocked by a Redis outage
+
 ## Database
 
 - Tests: SQLite in-memory (default)

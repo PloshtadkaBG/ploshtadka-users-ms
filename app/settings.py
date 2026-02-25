@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 
 db_url = os.environ.get("DB_URL", "sqlite://:memory:")
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
 # Basic auth/JWT settings following FastAPI security guide

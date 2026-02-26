@@ -77,6 +77,12 @@ This service is the **central scope registry** for the whole platform. `app/scop
 | `DEFAULT_OWNER_SCOPES` | Venue owner | + `venues:me/write/delete/images/schedule`, `bookings:manage` |
 | `DEFAULT_ADMIN_SCOPES` | Admin | `admin:users`, `admin:venues`, `admin:bookings` |
 
+### Scope escalation (admin-only)
+
+`PUT /users/{id}/scopes` — replaces a user's scopes list entirely. Used by the admin panel to escalate a regular user to venue owner by assigning `DEFAULT_OWNER_SCOPES`.
+
+`GET /scopes/` — returns all defined scopes with descriptions (admin only). Used by the admin panel scope picker UI.
+
 ## Authorization patterns
 
 ```python

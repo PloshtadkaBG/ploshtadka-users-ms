@@ -144,3 +144,4 @@ uv run aerich upgrade
 | `SECRET_KEY` | `change-me-in-production` | JWT signing key — **must** be set in prod |
 | `ALGORITHM` | `HS256` | JWT signing algorithm (hardcoded, not overridable) |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | JWT TTL |
+| `REDIS_URL`                   | `redis://localhost:6379/0` | Redis connection string (auth cache) |

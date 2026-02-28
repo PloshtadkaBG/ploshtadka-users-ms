@@ -1,4 +1,5 @@
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -66,7 +67,7 @@ async def verify_token(request: Request):
             headers={
                 "X-User-Id": cached["user_id"],
                 "X-User-Scopes": cached["scopes"],
-                "X-Username": cached["username"],
+                "X-Username": quote(cached["username"]),
             },
         )
 
@@ -84,7 +85,7 @@ async def verify_token(request: Request):
         headers={
             "X-User-Id": payload["user_id"],
             "X-User-Scopes": payload["scopes"],
-            "X-Username": payload["username"],
+            "X-Username": quote(payload["username"]),
         },
     )
 

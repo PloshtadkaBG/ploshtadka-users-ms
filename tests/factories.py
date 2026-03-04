@@ -32,6 +32,7 @@ class DummyUser:
         email: str | None = None,
         is_active: bool = True,
         scopes: list | None = None,
+        email_verification_token: str | None = None,
     ) -> None:
         self.id = user_id or uuid4()
         self.username = username
@@ -39,6 +40,10 @@ class DummyUser:
         self.email = email
         self.is_active = is_active
         self.scopes = list(scopes) if scopes is not None else []
+        self.email_verification_token = email_verification_token
+
+    async def save(self) -> None:
+        """No-op for tests — allows verify-email endpoint to call user.save()."""
 
 
 # ---------------------------------------------------------------------------

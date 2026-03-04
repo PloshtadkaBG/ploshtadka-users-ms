@@ -25,5 +25,11 @@ CONTACT_RATE_LIMIT = int(os.environ.get("CONTACT_RATE_LIMIT", "5"))
 CONTACT_RATE_WINDOW = int(os.environ.get("CONTACT_RATE_WINDOW", "3600"))  # seconds
 
 
+NOTIFICATIONS_MS_URL = os.environ.get(
+    "NOTIFICATIONS_MS_URL", "http://notifications-ms:8004"
+)
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL", "http://localhost:3000")
+
+
 def access_token_expires_delta() -> timedelta:
     return timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

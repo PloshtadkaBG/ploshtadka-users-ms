@@ -19,4 +19,5 @@ class User(AbstractModel):
     hashed_password = fields.CharField(max_length=256, null=True)
     google_id = fields.CharField(max_length=128, null=True, unique=True)
     is_active = fields.BooleanField(default=True)
+    email_verification_token = fields.CharField(max_length=128, null=True)
     scopes = fields.JSONField(default=list)

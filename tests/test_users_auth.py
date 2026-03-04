@@ -62,12 +62,15 @@ class TestRegisterUser:
             username="newuser",
             email="newuser@example.com",
             full_name="New User",
+            is_active=False,
             scopes=["users:me"],
+            email_verification_token="test-token",
         )
         with (
             patch(f"{USERS_CRUD_PATH}.get_user_by_username", new=AsyncMock(return_value=None)),
             patch(f"{USERS_CRUD_PATH}.get_user_by_email", new=AsyncMock(return_value=None)),
             patch(f"{USERS_CRUD_PATH}.create_user", new=AsyncMock(return_value=created)),
+            patch(f"{USERS_CRUD_PATH}._send_verification_email", new=AsyncMock()),
         ):
             resp = user_client.post(
                 "/users/",
@@ -82,7 +85,7 @@ class TestRegisterUser:
         body = resp.json()
         assert body["username"] == "newuser"
         assert body["email"] == "newuser@example.com"
-        assert body["is_active"] is True
+        assert body["is_active"] is False
 
     def test_duplicate_username(self, user_client: TestClient):
         existing = make_user()
@@ -167,3 +170,55 @@ class TestUserScopes:
                 f"/users/{uuid4()}/scopes", json={"scopes": [UserScope.READ]}
             )
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /auth/verify-email
+# ---------------------------------------------------------------------------
+
+
+class TestVerifyEmail:
+    def test_success(self, user_client: TestClient):
+        unverified = DummyUser(
+            user_id=uuid4(),
+            username="pending",
+            email="pending@example.com",
+            is_active=False,
+            email_verification_token="valid-token",
+        )
+        with patch(
+            f"{AUTH_CRUD_PATH}.get_user_by_verification_token",
+            new=AsyncMock(return_value=unverified),
+        ):
+            resp = user_client.get("/auth/verify-email?token=valid-token")
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Email verified successfully"
+        assert unverified.is_active is True
+        assert unverified.email_verification_token is None
+
+    def test_already_verified(self, user_client: TestClient):
+        already_active = DummyUser(
+            user_id=uuid4(),
+            username="active",
+            is_active=True,
+            email_verification_token="some-token",
+        )
+        with patch(
+            f"{AUTH_CRUD_PATH}.get_user_by_verification_token",
+            new=AsyncMock(return_value=already_active),
+        ):
+            resp = user_client.get("/auth/verify-email?token=some-token")
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Email already verified"
+
+    def test_invalid_token(self, user_client: TestClient):
+        with patch(
+            f"{AUTH_CRUD_PATH}.get_user_by_verification_token",
+            new=AsyncMock(return_value=None),
+        ):
+            resp = user_client.get("/auth/verify-email?token=bad-token")
+        assert resp.status_code == 400
+
+    def test_missing_token(self, user_client: TestClient):
+        resp = user_client.get("/auth/verify-email")
+        assert resp.status_code == 422

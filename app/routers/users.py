@@ -1,10 +1,11 @@
+import secrets
 from uuid import UUID
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Security, status
-
-from app import Schema, user_crud
 from loguru import logger
 
+from app import Schema, user_crud
 from app.auth import get_password_hash
 from app.cache import invalidate_user_cache
 from app.crud import (
@@ -23,8 +24,46 @@ from app.deps import (
 from app.models import User
 from app.schemas import UserCreate, UserPublic, UserScopesUpdate, UserUpdate
 from app.scopes import DEFAULT_USER_SCOPES, UserScope
+from app.settings import FRONTEND_BASE_URL, NOTIFICATIONS_MS_URL
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+async def _send_verification_email(email: str, token: str) -> None:
+    """Fire-and-forget call to notifications-ms to send the verification email."""
+    verify_url = f"{FRONTEND_BASE_URL}/auth/verify-email?token={token}"
+    html = (
+        "<h2>Потвърдете имейла си / Verify your email</h2>"
+        f'<p>Натиснете бутона по-долу, за да активирате акаунта си:</p>'
+        f'<p>Click the button below to activate your account:</p>'
+        f'<a href="{verify_url}" style="display:inline-block;padding:12px 24px;'
+        f'background:#10b981;color:#fff;text-decoration:none;border-radius:6px;'
+        f'font-weight:600;">Потвърди / Verify</a>'
+        f"<p style=\"color:#888;font-size:12px;margin-top:24px;\">"
+        f"Ако не сте създали акаунт, игнорирайте този имейл.<br>"
+        f"If you didn't create an account, ignore this email.</p>"
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{NOTIFICATIONS_MS_URL}/notifications/send",
+                json={
+                    "to": email,
+                    "subject": "Потвърдете имейла си | Verify your email",
+                    "html": html,
+                    "template": "email_verification",
+                    "triggered_by": "users-ms",
+                },
+                headers={
+                    "X-User-Id": "00000000-0000-0000-0000-000000000000",
+                    "X-Username": "system",
+                    "X-User-Scopes": "admin:notifications:write",
+                },
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.error("Failed to send verification email to {}: {}", email, exc)
 
 
 @router.post("/", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
@@ -45,13 +84,22 @@ async def register_user(payload: UserCreate) -> UserPublic:
             )
 
     hashed_password = get_password_hash(payload.password)
+    verification_token = secrets.token_urlsafe(32)
+
     user = await create_user(
         username=payload.username,
         email=str(payload.email) if payload.email else None,
         full_name=payload.full_name,
         hashed_password=hashed_password,
         scopes=DEFAULT_USER_SCOPES,
+        is_active=False,
+        email_verification_token=verification_token,
     )
+
+    if payload.email:
+        await _send_verification_email(str(payload.email), verification_token)
+        logger.info("Verification email sent to {}", payload.email)
+
     return UserPublic.model_validate(user)
 
 

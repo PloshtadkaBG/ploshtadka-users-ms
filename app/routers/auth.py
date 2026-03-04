@@ -1,7 +1,7 @@
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 import urllib3
 from google.auth.transport import urllib3 as google_urllib3
@@ -11,7 +11,13 @@ from pydantic import BaseModel
 
 from app.auth import authenticate_user, create_access_token
 from app.cache import get_verify_cache, set_verify_cache
-from app.crud import create_user, get_user_by_email, get_user_by_google_id, get_user_by_username
+from app.crud import (
+    create_user,
+    get_user_by_email,
+    get_user_by_google_id,
+    get_user_by_username,
+    get_user_by_verification_token,
+)
 from app.deps import resolve_user
 from app.schemas import Token
 from app.scopes import DEFAULT_USER_SCOPES
@@ -88,6 +94,26 @@ async def verify_token(request: Request):
             "X-Username": quote(payload["username"]),
         },
     )
+
+
+@router.get("/verify-email")
+async def verify_email(token: str = Query(..., min_length=1)):
+    """Public endpoint — activates a user account via the email verification token."""
+    user = await get_user_by_verification_token(token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token",
+        )
+
+    if user.is_active:
+        return {"message": "Email already verified"}
+
+    user.is_active = True
+    user.email_verification_token = None
+    await user.save()
+    logger.info("Email verified for user: username={}", user.username)
+    return {"message": "Email verified successfully"}
 
 
 @router.post("/google", response_model=Token)
